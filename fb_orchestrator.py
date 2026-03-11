@@ -2,17 +2,24 @@ import subprocess
 import time
 import os
 import sys
+import random
 from datetime import datetime, timedelta
+import typing
 
-# --- CONFIGURATION ---
-LIKER_INTERVAL_HOURS = 4
-MARKETING_HOUR_JST = 10  # 10:00 AM JST
+# --- CONFIGURATION (All times in JST) ---
+LIKER_TIMES = ["12:00", "14:00", "16:00", "18:00", "20:00", "22:00"]
+MARKETING_TIME = ["01:00"]
+POSTER_TIME = ["05:00"]  # 10:00 AM HST is 05:00 AM JST
+JITTER_MIN_MINUTES = 2
+JITTER_MAX_MINUTES = 8
 CHECK_INTERVAL_SECONDS = 60  # Check every minute
 
 # Paths
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 LIKER_SCRIPT = os.path.join(BASE_DIR, "fb_liker.py")
 MARKETING_SCRIPT = os.path.join(BASE_DIR, "fb_marketing_agent.py")
+POSTER_SCRIPT = os.path.join(BASE_DIR, "fb_poster.py")
+
 
 def log(message):
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -35,39 +42,87 @@ def run_script(cmd):
         log(f"Error running script {cmd[-1]}: {e}")
         return False
 
+def get_target_time(time_str, date_str):
+    """Returns a datetime object for the given HH:MM and YYYY-MM-DD."""
+    return datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M")
+
 def main():
     log("Facebook Marketing Orchestrator started.")
     
-    last_liker_run = datetime.min
-    last_marketing_run_date = ""
+    # Track which specific slots have been run today to avoid double-runs
+    # Format: "YYYY-MM-DD_Script_Time"
+    completed_runs: typing.Set[str] = set()
+
+    # Pre-populate with anything that passed today already to avoid triggering 
+    # old tasks immediately on script startup.
+    now_startup = datetime.now()
+    current_date_startup = now_startup.strftime("%Y-%m-%d")
+    
+    for t in LIKER_TIMES:
+        if now_startup >= get_target_time(t, current_date_startup):
+            completed_runs.add(f"{current_date_startup}_liker_{t}")
+    for t in MARKETING_TIME:
+        if now_startup >= get_target_time(t, current_date_startup):
+            completed_runs.add(f"{current_date_startup}_marketing_{t}")
+    for t in POSTER_TIME:
+        if now_startup >= get_target_time(t, current_date_startup):
+            completed_runs.add(f"{current_date_startup}_poster_{t}")
+    
+    if completed_runs:
+        log(f"Skipping {len(completed_runs)} already-passed tasks for today.")
 
     while True:
         now = datetime.now()
-        current_date_str = now.strftime("%Y-%m-%d")
+        current_date = now.strftime("%Y-%m-%d")
+        current_hm = now.strftime("%H:%M")
 
-        # 1. Check Liker (Every 4 hours)
-        if now >= last_liker_run + timedelta(hours=LIKER_INTERVAL_HOURS):
-            log("Due for Liker run.")
-            success = run_script(["uv", "run", "python", LIKER_SCRIPT, "--once"])
-            if success:
-                last_liker_run = datetime.now() # Update only on success or attempt? 
-                # Better update always to avoid infinite retry loops if it keeps failing
-                last_liker_run = datetime.now()
-            else:
-                # If failed, we might want to retry sooner, but for now let's just stick to the interval
-                last_liker_run = datetime.now()
+        # 1. Check Liker Schedule
+        for t in LIKER_TIMES:
+            run_id = f"{current_date}_liker_{t}"
+            if run_id not in completed_runs:
+                target_dt = get_target_time(t, current_date)
+                if now >= target_dt:
+                    # Add jitter: wait a few minutes if we just hit the time
+                    delay = random.randint(JITTER_MIN_MINUTES, JITTER_MAX_MINUTES)
+                    if now >= target_dt + timedelta(minutes=delay):
+                        log(f"Due for Liker run (scheduled for {t}, with {delay}m jitter).")
+                        success = run_script(["uv", "run", "python", LIKER_SCRIPT, "--once"])
+                        completed_runs.add(run_id)
+                    elif now >= target_dt:
+                        # We are in the jitter window, just wait
+                        pass
 
-        # 2. Check Marketing Agent (Once a day at/after MARKETING_HOUR_JST)
-        if now.hour >= MARKETING_HOUR_JST and last_marketing_run_date != current_date_str:
-            log("Due for Marketing run.")
-            success = run_script(["uv", "run", "python", MARKETING_SCRIPT])
-            if success:
-                last_marketing_run_date = current_date_str
-            else:
-                # If failed, we don't update the date so it can retry in the next 1-minute check
-                # But to avoid rapid fire failure, let's wait a bit
-                log("Marketing run failed. Will retry in the next check.")
-                time.sleep(300) # Wait 5 mins before next check if something is wrong
+        # 2. Check Marketing Schedule
+        for t in MARKETING_TIME:
+            run_id = f"{current_date}_marketing_{t}"
+            if run_id not in completed_runs:
+                target_dt = get_target_time(t, current_date)
+                if now >= target_dt:
+                    delay = random.randint(JITTER_MIN_MINUTES, JITTER_MAX_MINUTES)
+                    if now >= target_dt + timedelta(minutes=delay):
+                        log(f"Due for Marketing run (scheduled for {t}, with {delay}m jitter).")
+                        success = run_script(["uv", "run", "python", MARKETING_SCRIPT])
+                        completed_runs.add(run_id)
+
+        # 3. Check Poster Schedule
+        for t in POSTER_TIME:
+            run_id = f"{current_date}_poster_{t}"
+            if run_id not in completed_runs:
+                target_dt = get_target_time(t, current_date)
+                if now >= target_dt:
+                    delay = random.randint(JITTER_MIN_MINUTES, JITTER_MAX_MINUTES)
+                    if now >= target_dt + timedelta(minutes=delay):
+                        log(f"Due for Poster run (scheduled for {t}, with {delay}m jitter).")
+                        success = run_script(["uv", "run", "python", POSTER_SCRIPT])
+                        completed_runs.add(run_id)
+
+        # Cleanup old runs from set periodically (e.g., at midnight)
+        if current_hm == "00:00":
+            # Keep only today's runs in the set to prevent it from growing infinitely
+            # (Though it would take years to be a problem, it's good practice)
+            # Actually, let's just clear runs from yesterday
+            yesterday = (now - timedelta(days=1)).strftime("%Y-%m-%d")
+            completed_runs = {r for r in completed_runs if not r.startswith(yesterday)}
 
         # Sleep until next check
         time.sleep(CHECK_INTERVAL_SECONDS)

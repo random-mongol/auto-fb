@@ -15,7 +15,9 @@ The goal of this project is to build a high-stealth, human-mimicking Facebook ma
 - `fb_orchestrator.py`: The master scheduler that triggers the scripts at the correct intervals and handles execution.
 - `fb_marketing_agent.py`: The core agent for sending friend requests. Uses Playwright + Ghost-Cursor.
 - `fb_liker.py`: Engagement script. Supports both looping and single runs (`--once`).
+- `fb_poster.py`: Automatic article posting script. Fetches articles from `huuli.tech` and posts them to a specific profile.
 - `pyproject.toml` & `uv.lock`: Dependency management via `uv`. Always use `uv sync` to set up the environment.
+
 - `.env`: Contains configuration for `PROXY_SERVER`, `FB_PROFILE_PATH`, `DATABASE_URL`, and target group URLs.
 - `database.py` & `models.py`: SQLAlchemy database configuration and models.
 - `alembic/`: Database migration scripts.
@@ -45,8 +47,11 @@ The goal of this project is to build a high-stealth, human-mimicking Facebook ma
 
 ### 5. Automation & Scheduling (Orchestrator)
 The project uses `fb_orchestrator.py` instead of OS-specific schedulers (like `plist` or `cron`).
-- **Liker**: Runs every 4 hours.
-- **Marketing**: Runs once a day at 10:00 JST.
+- **Liker**: Runs 6 times a day (12, 2, 4, 6, 8, 10 PM JST).
+- **Marketing (Friend Requests)**: Runs daily at 01:00 JST.
+- **Poster**: Runs daily at 05:00 JST (matched to 10:00 AM HST).
+- **Stealth Scheduling**: All tasks have a random jitter delay (2-8 minutes) added to their scheduled time to avoid predictable patterns.
+- **All times/schedules are defined in JST.**
 - **Safety**: The orchestrator ensures that only one script runs at a time to prevent `fb_profile` lock collisions.
 
 ### 6. Database & Migrations
@@ -71,6 +76,7 @@ The project uses PostgreSQL with SQLAlchemy.
 | Test Liker (Once) | `uv run python fb_liker.py --once` |
 | **Run Migrations** | `uv run alembic upgrade head` |
 | **Import Groups** | `uv run python import_groups.py` |
+| **Test Poster** | `uv run python fb_poster.py` |
 
 ---
 
@@ -87,3 +93,26 @@ When you change something, please update or append your changes to the AGENTS.md
     - Standardized "Human Jitter" to strictly follow the 2-5s variance rule over a 5s baseline.
     - Updated `TARGET_LIKES` to 5 to match repo standards.
     - Added better handling for browser closure during long operations (Detects "Target page closed" and exits gracefully).
+
+### Update 2026-03-12: Automated Article Posting
+- **`fb_poster.py` Added**:
+    - Fetches articles from `https://huuli.tech/sitemap.xml`.
+    - Filters out already posted articles using the `posted_articles` table.
+    - Automates the posting process on the user's Facebook profile.
+    - Integrated into `fb_orchestrator.py` to run daily at 10:05 JST.
+- **Database Changes**:
+    - Added `posted_articles` table to track URL history.
+
+### Update 2026-03-12 (v2): Schedule & Jitter Unification
+- **`fb_orchestrator.py` Updated**:
+    - Unified all schedules at the top of the script.
+    - Updated Liker to run 6 times a day: 12, 14, 16, 18, 20, 22 (JST).
+    - Updated Marketing (Friend Request) to run at 01:00 JST.
+    - Updated Poster to run at 05:00 JST (10:00 AM HST).
+    - Added a mandatory random jitter (2-8 minutes) to all scheduled runs for increased stealth.
+    - Standardized all internal timekeeping to JST.
+
+### Update 2026-03-11 (v2): Orchestrator Startup Logic
+- **`fb_orchestrator.py` Updated**:
+    - Prevented immediate execution of missed tasks upon script startup.
+    - The orchestrator now pre-populates the "completed runs" set with any scheduled tasks that have already passed for the current day, ensuring it waits for the *next* scheduled occurrence.

@@ -14,3 +14,14 @@ class FBGroup(Base):
 
     def __repr__(self):
         return f"<FBGroup(name='{self.name}', facebook='{self.facebook}')>"
+
+class PostedArticle(Base):
+    __tablename__ = "posted_articles"
+
+    id = Column(Integer, primary_key=True, index=True)
+    url = Column(String, unique=True, index=True, nullable=False)
+    posted_at = Column(DateTime, server_default=func.now())
+
+    def __repr__(self):
+        return f"<PostedArticle(url='{self.url}')>"
+
