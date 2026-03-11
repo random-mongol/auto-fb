@@ -116,3 +116,12 @@ When you change something, please update or append your changes to the AGENTS.md
 - **`fb_orchestrator.py` Updated**:
     - Prevented immediate execution of missed tasks upon script startup.
     - The orchestrator now pre-populates the "completed runs" set with any scheduled tasks that have already passed for the current day, ensuring it waits for the *next* scheduled occurrence.
+
+### Update 2026-03-11 (v3): Switch Posting to Facebook Page & Engagement
+- **`fb_poster.py` Updated**:
+    - Changed the target from the user's home wall to the Facebook Page "huuli.tech - Хуульчийн ухаалаг туслах."
+    - Implemented a generic `switch_profile` function to handle switching between any profile/page.
+    - Added a "Phase 2" engagement step: After posting as a page, the script switches back to the personal profile ("Хуульч Сэцэн") to Like and Share the new post to the personal feed.
+    - Added mandatory 'Next' button click step when posting as a Page.
+    - Standardized `human_click` as a shared utility to handle all interaction logic.
+    - Updated `FB_PROFILE_URL` to the page's profile URL: `https://www.facebook.com/profile.php?id=61579195435310`.
