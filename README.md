@@ -1,3 +1,23 @@
+Automatic
+- Facebook friend request sender
+- Facebook group content liker
+- Facebook poster from web content 
+
+- Friend Request Follow-Up Messenger
+- Reel generator 
+
+Requires AI
+- Facebook group content commenter
+- Scrape -> Like/comment on best one
+- AI Post Generator (Nvidea AI)
+
+Integrate postgres
+
+- SEO post writer. 
+
+
+Page automation.
+
 # Facebook Marketing Agent (AI-Powered)
 
 This project automates Facebook friend requests using Playwright with stealth, residential proxy support, and human-like interactions (Ghost-Cursor).
@@ -41,4 +61,46 @@ This project automates Facebook friend requests using Playwright with stealth, r
 - Clicks and waits 5 seconds (plus random noise) between requests.
 - Stops after 20 successful requests.
 
+## Automated Group Liking (`fb_liker.py`)
 
+A specialized script to maintain group activity by liking posts.
+
+### Features
+- **Every 4 Hours**: Automatically runs on a loop (4-hour interval).
+- **Target Groups**: Randomly picks a group from a configurable list.
+- **Human-Like Activity**: Scrolls down and likes 10 visible posts per run.
+- **Jittered Timing**: 5-second baseline delay between likes plus random noise.
+- **Shared Session**: Uses the `fb_profile` folder to share login state with the marketing agent.
+
+## Automation & Scheduling
+
+The project uses a unified orchestrator to manage multiple tasks and handle timing. It ensures that only one script runs at a time to avoid conflicts with the browser profile.
+
+### Start the Orchestrator
+```bash
+uv run python fb_orchestrator.py
+```
+
+### Schedule
+- **Facebook Liker**: Runs every 4 hours (lking 10 posts).
+- **Marketing Agent**: Runs once daily at 10:00 JST (sending up to 20 friend requests).
+
+### Individual Script Testing
+If you want to run scripts manually for testing:
+- **Test Liker**: `uv run python fb_liker.py --once`
+- **Test Marketing**: `uv run python fb_marketing_agent.py`
+
+
+# Manual operations by human 
+
+## 
+1. Go to https://www.facebook.com/groups/joins/?nav_source=tab
+2. Copy element inside <div role="list"/> inside <div role="main"/>
+3. Copy element into data/joined-group-list.html
+
+
+Task	Command
+Run Migrations	`uv run alembic upgrade head`
+Import Groups from HTML	`uv run python import_groups.py`
+Test Liker (Single Run)	`uv run python fb_liker.py --once`
+Test Marketing Agent	`uv run python fb_marketing_agent.py`

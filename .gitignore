@@ -10,4 +10,5 @@ wheels/
 .venv
 .playwright-browsers/
 fb_profile/
+common_fb_profile/
 .env
