@@ -78,6 +78,7 @@ The project uses PostgreSQL with SQLAlchemy.
 | **Run Migrations** | `uv run alembic upgrade head` |
 | **Import Groups** | `uv run python import_groups.py` |
 | **Test Poster** | `uv run python fb_poster.py` |
+| **Generate Reel** | `uv run python fb_reel_generator.py` |
 
 ---
 
@@ -157,3 +158,14 @@ When you change something, please update or append your changes to the AGENTS.md
     - Set Messenger script to run daily at 11:00 JST.
     - Added Messenger task to the startup completion check and main scheduling loop.
     - Fixed potentially orphaned code in the Poster section of the orchestrator to ensure clean execution.
+
+### Update 2026-03-14 (v4): Resumable Reel Generation Pipeline
+- **`fb_reel_generator.py` Added**:
+    - Implements a resumable artifact pipeline for `topic -> script -> voice -> visuals -> edit`.
+    - Pulls candidate legal topics from `https://huuli.tech/sitemap.xml`, skips already-generated articles via the database, and stores artifacts under `artifacts/reels/<slug>/`.
+    - Supports `--step`, `--source-url`, `--reel-id`, and `--force` so runs can resume from any step without redoing completed work.
+    - Generates short script artifacts with an OpenAI hook when `OPENAI_API_KEY` and `OPENAI_MODEL` are configured, and falls back to a deterministic local script builder otherwise.
+    - Generates ElevenLabs voice plus word timestamps when `ELEVENLABS_API_KEY` and `ELEVENLABS_VOICE_ID` are configured, and falls back to silent audio plus synthetic timestamps otherwise.
+    - Produces animated gradient backgrounds, grouped subtitle timing, and a final vertical reel video using MoviePy/Pillow.
+- **Database Changes**:
+    - Added `generated_reels` table to track source URLs, artifact directories, step completion timestamps, and error state for resumable generation.

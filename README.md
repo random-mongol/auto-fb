@@ -2,6 +2,7 @@ Automatic
 [x] Facebook friend request sender
 [x] Facebook group content liker
 [x] Facebook poster from web content, and share 
+[x] Reel generator pipeline
 [ ] Friend Request Follow-Up Messenger
    [ ] Reply follow up message
 [ ] Post to other groups
@@ -109,3 +110,4 @@ Run Migrations	`uv run alembic upgrade head`
 Import Groups from HTML	`uv run python import_groups.py`
 Test Liker (Single Run)	`uv run python fb_liker.py --once`
 Test Marketing Agent	`uv run python fb_marketing_agent.py`
+Generate Reel Pipeline	`uv run python fb_reel_generator.py`

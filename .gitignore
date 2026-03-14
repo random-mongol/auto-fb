@@ -12,3 +12,4 @@ wheels/
 fb_profile/
 common_fb_profile/
 .env
+artifacts/
