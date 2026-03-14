@@ -125,3 +125,14 @@ When you change something, please update or append your changes to the AGENTS.md
     - Added mandatory 'Next' button click step when posting as a Page.
     - Standardized `human_click` as a shared utility to handle all interaction logic.
     - Updated `FB_PROFILE_URL` to the page's profile URL: `https://www.facebook.com/profile.php?id=61579195435310`.
+
+### Update 2026-03-12 (v3): Robust Selectors for Posting
+- **`fb_poster.py` Selector Fix**:
+    - Improved 'What's on your mind?' trigger and modal detection with multiple fallback selectors (Localizations/Different Page UI).
+    - Updated 'Post' button selectors to include `div[aria-label="Post"]` and lowercase "post" text as suggested by user logs.
+    - Simplified 'Next' button selector for better reliability during Page posting.
+
+### Update 2026-03-13: Paused Automated Posting
+- **`fb_orchestrator.py` Updated**:
+    - Commented out the `POSTER_TIME` execution block in the main loop to temporarily stop automated article posting.
+    - Updated `POSTER_TIME` configuration line with a "paused for now" note.

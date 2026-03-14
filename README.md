@@ -1,7 +1,12 @@
 Automatic
-- Facebook friend request sender
-- Facebook group content liker
-- Facebook poster from web content 
+[x] Facebook friend request sender
+[x] Facebook group content liker
+[x] Facebook poster from web content, and share 
+[ ] Friend Request Follow-Up Messenger
+   [ ] Reply follow up message
+[ ] Post to other groups
+[ ] Post to other groups
+[ ] Write comments
 
 - Friend Request Follow-Up Messenger
 - Reel generator 

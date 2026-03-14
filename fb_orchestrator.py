@@ -8,8 +8,8 @@ import typing
 
 # --- CONFIGURATION (All times in JST) ---
 LIKER_TIMES = ["12:00", "14:00", "16:00", "18:00", "20:00", "22:00"]
-MARKETING_TIME = ["01:00"]
-POSTER_TIME = ["05:00"]  # 10:00 AM HST is 05:00 AM JST
+MARKETING_TIME = ["13:00", "15:00", "17:00", "19:00", "21:00", "23:00"]
+POSTER_TIME = ["05:00"]  # 10:00 AM HST is 05:00 AM JST: paused for now
 JITTER_MIN_MINUTES = 2
 JITTER_MAX_MINUTES = 8
 CHECK_INTERVAL_SECONDS = 60  # Check every minute
@@ -64,9 +64,9 @@ def main():
     for t in MARKETING_TIME:
         if now_startup >= get_target_time(t, current_date_startup):
             completed_runs.add(f"{current_date_startup}_marketing_{t}")
-    for t in POSTER_TIME:
-        if now_startup >= get_target_time(t, current_date_startup):
-            completed_runs.add(f"{current_date_startup}_poster_{t}")
+    # for t in POSTER_TIME:
+    #     if now_startup >= get_target_time(t, current_date_startup):
+    #         completed_runs.add(f"{current_date_startup}_poster_{t}")
     
     if completed_runs:
         log(f"Skipping {len(completed_runs)} already-passed tasks for today.")
@@ -105,16 +105,16 @@ def main():
                         completed_runs.add(run_id)
 
         # 3. Check Poster Schedule
-        for t in POSTER_TIME:
-            run_id = f"{current_date}_poster_{t}"
-            if run_id not in completed_runs:
-                target_dt = get_target_time(t, current_date)
-                if now >= target_dt:
-                    delay = random.randint(JITTER_MIN_MINUTES, JITTER_MAX_MINUTES)
-                    if now >= target_dt + timedelta(minutes=delay):
-                        log(f"Due for Poster run (scheduled for {t}, with {delay}m jitter).")
-                        success = run_script(["uv", "run", "python", POSTER_SCRIPT])
-                        completed_runs.add(run_id)
+        # for t in POSTER_TIME:
+        #     run_id = f"{current_date}_poster_{t}"
+        #     if run_id not in completed_runs:
+        #         target_dt = get_target_time(t, current_date)
+        #         if now >= target_dt:
+        #             delay = random.randint(JITTER_MIN_MINUTES, JITTER_MAX_MINUTES)
+        #             if now >= target_dt + timedelta(minutes=delay):
+        #                 log(f"Due for Poster run (scheduled for {t}, with {delay}m jitter).")
+        #                 success = run_script(["uv", "run", "python", POSTER_SCRIPT])
+        #                 completed_runs.add(run_id)
 
         # Cleanup old runs from set periodically (e.g., at midnight)
         if current_hm == "00:00":

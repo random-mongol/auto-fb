@@ -184,33 +184,48 @@ async def post_to_facebook():
             await page.goto(FB_PROFILE_URL, wait_until="domcontentloaded", timeout=60000)
             await asyncio.sleep(8) 
 
-            # Step 1: Click on span with "What's on your mind?"
-            # We look for a span that contains the text. FB often localizes, 
-            # but the user provided specific English text.
+            # Step 1: Click on triggering element for post modal
             print("Opening 'What's on your mind?' modal...")
-            # Selector for the initial button on the profile page
-            post_trigger_selector = 'span:has-text("What\'s on your mind?")'
-            if not await human_click(page, cursor, post_trigger_selector):
-                # Try fallback for "What's on your mind, [Name]?"
-                if not await human_click(page, cursor, 'span:has-text("What\'s on your mind")'):
-                    print("Failed to find 'What's on your mind?' span.")
-                    return
-
+            # More robust selectors for the post trigger
+            trigger_selectors = [
+                'span:has-text("What\'s on your mind?")',
+                'span:has-text("What\'s on your mind")',
+                'div[role="button"] span:has-text("Write something")',
+                'div[aria-label^="What\'s on your mind"]',
+                'div[aria-label^="Write something"]'
+            ]
+            
+            trigger_clicked = False
+            for selector in trigger_selectors:
+                if await human_click(page, cursor, selector, timeout=5000):
+                    trigger_clicked = True
+                    break
+            
+            if not trigger_clicked:
+                print("Failed to find 'What's on your mind?' trigger.")
+                # We try to proceed anyway as sometimes the page state is weird
+            
             await asyncio.sleep(3)
             await Confuser.random_delay()
 
-            # Step 2: Paste URL inside span with "What's on your mind?" text (in the modal)
+            # Step 2: Paste URL inside the modal
             print(f"Entering URL: {target_url}")
-            # In the modal, there is usually a div with role="textbox" that contains the span.
-            # We can click the span or the textbox.
-            modal_span_selector = 'div[role="dialog"] span:has-text("What\'s on your mind?")'
-            if not await human_click(page, cursor, modal_span_selector, timeout=5000):
-                # If the span isn't found in the dialog, try the fallback
-                if not await human_click(page, cursor, 'div[role="dialog"] span:has-text("What\'s on your mind")', timeout=5000):
-                    # If span is gone (clicked), the focused element might already be the textbox
-                    pass
+            # Try to find the textbox directly or the span that placeholder
+            modal_selectors = [
+                'div[role="dialog"] div[role="textbox"]',
+                'div[role="dialog"] span:has-text("What\'s on your mind?")',
+                'div[role="dialog"] span:has-text("What\'s on your mind")',
+                'div[role="textbox"][aria-label^="What\'s on your mind"]',
+                'div[role="textbox"][aria-label^="Write something"]'
+            ]
             
-            # Type the URL with human jitter
+            found_modal_input = False
+            for selector in modal_selectors:
+                if await human_click(page, cursor, selector, timeout=3000):
+                    found_modal_input = True
+                    break
+            
+            # Type the URL regardless if click worked (it might already have focus)
             await page.keyboard.type(target_url, delay=random.randint(40, 120))
             
             print("Waiting for URL preview to generate...")
@@ -218,24 +233,37 @@ async def post_to_facebook():
             await Confuser.random_delay()
 
             # Step 2.5: Click 'Next' if present (Required for Page posting)
-            next_btn_selector = 'div[role="dialog"] div[aria-label="Next"]'
+            next_btn_selector = 'div[aria-label="Next"]' # Simplified selector
             print("Checking for 'Next' button...")
             if await human_click(page, cursor, next_btn_selector, timeout=5000):
                 print("'Next' clicked. Waiting for Post button...")
                 await asyncio.sleep(3)
+            elif await human_click(page, cursor, 'div[role="dialog"] div[aria-label="Next"]', timeout=3000):
+                print("'Next' (fallback) clicked. Waiting for Post button...")
+                await asyncio.sleep(3)
 
             # Step 3: Click on Post button
             print("Clicking 'Post'...")
-            # Post button usually has inner span with text "Post"
-            # It's inside the dialog. 
-            post_btn_selector = 'div[role="dialog"] div[aria-label="Post"]'
-            # First try the aria-label which is very stable
-            if not await human_click(page, cursor, post_btn_selector, timeout=5000):
-                # Fallback to the span text as requested
-                if not await human_click(page, cursor, 'div[role="dialog"] span:text-is("Post")', timeout=5000):
-                    if not await human_click(page, cursor, 'div[role="dialog"] span:has-text("Post")', timeout=5000):
-                        print("Failed to find 'Post' button.")
-                        return
+            # User suggested: <div aria-label="Post"> text: post
+            post_selectors = [
+                'div[aria-label="Post"]', 
+                'div[role="dialog"] div[aria-label="Post"]',
+                'div[role="button"] span:text-is("Post")',
+                'div[role="button"] span:has-text("Post")',
+                'div[aria-label="Post"] span:has-text("Post")', # Literal lowercase check from user tip
+                'span:text-is("Post")',
+                'span:has-text("Post")'
+            ]
+            
+            post_clicked = False
+            for selector in post_selectors:
+                if await human_click(page, cursor, selector, timeout=5000):
+                    post_clicked = True
+                    break
+            
+            if not post_clicked:
+                print("Failed to find 'Post' button.")
+                return
 
             print("Post button clicked. Waiting for confirmation...")
             await asyncio.sleep(20) # Wait for upload
