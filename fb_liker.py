@@ -80,6 +80,9 @@ async def perform_group_likes():
 
         async def human_click(element):
             try:
+                # Ensure element is in view before ghost-cursor tries to move to it
+                await element.scroll_into_view_if_needed()
+                await asyncio.sleep(random.uniform(0.5, 1.5))
                 # Use ghost-cursor for realistic movement
                 await cursor.click(element)
                 return True
@@ -138,13 +141,9 @@ async def perform_group_likes():
                     await asyncio.sleep(5)
 
             likes_done = 0
-            like_selector = 'div[aria-label="Like"] span:has-text("Like")'
-            # Alternative: direct div with label
-            alt_like_selector = 'div[aria-label="Like"]'
+            # Target likes specifically within articles (posts) to avoid sidebar/group buttons
+            like_selector = 'div[role="article"] div[aria-label="Like"]'
             
-            # We track which posts we've liked during this run to avoid repeat clicks if visible
-            liked_elements = set()
-
             print(f"Starting to scroll and like {TARGET_LIKES} posts...")
             
             max_scroll_attempts = 50
@@ -154,15 +153,20 @@ async def perform_group_likes():
 
                 # Find all visible like buttons
                 try:
-                    # Wait for the main container to ensure we are on a page that actually has posts
+                    # Wait for the main container
                     await page.wait_for_selector('div[role="main"]', timeout=5000)
-                    buttons = await page.query_selector_all('div[aria-label="Like"]')
+                    # Query buttons within articles to be safe
+                    buttons = await page.query_selector_all(like_selector)
+                    
+                    # If no buttons found with article scoping, fallback to generic as a last resort
+                    # but only if we haven't found anything for a few scrolls.
+                    if not buttons and scroll > 5:
+                        buttons = await page.query_selector_all('div[aria-label="Like"]')
                 except Exception as e:
                     error_msg = str(e)
                     if "context was destroyed" in error_msg:
                         print("Execution context destroyed. Retrying in next scroll...")
                         await asyncio.sleep(3)
-                        # Instead of breaking, we scroll and try again
                         await page.evaluate("window.scrollBy(0, 500)")
                         continue
                     if "Target page, context or browser has been closed" in error_msg:
@@ -170,7 +174,6 @@ async def perform_group_likes():
                         break
                         
                     print(f"Error querying buttons: {error_msg}")
-                    # If it's a timeout or other non-fatal error, try to scroll and continue
                     await asyncio.sleep(2)
                     continue
 
@@ -180,19 +183,19 @@ async def perform_group_likes():
                             break
                         
                         # Check if it is already "Liked" or if it is the wrong button
-                        # Facebook changes the label to "Remove Like" or "Unlike" once clicked
                         label = await btn.get_attribute("aria-label")
                         if label != "Like":
+                            # FB changes label to "Remove Like" or "Unlike"
                             continue
                         
-                        # Ensure it's visible and check for the span
+                        # Ensure it's visible
                         if not await btn.is_visible():
                             continue
                         
-                        # Optionally check for the span "Like" inside
+                        # Further validation: ensure there is a "Like" text inside
+                        # This avoids clicking icons that might have the same label but are not the main button
                         span = await btn.query_selector('span:text-is("Like")')
                         if not span:
-                            # Sometimes it might be lowercase or have different structure
                             span = await btn.query_selector('span:has-text("Like")')
                         
                         if not span:
@@ -203,9 +206,7 @@ async def perform_group_likes():
                         success = await human_click(btn)
                         if success:
                             likes_done += 1
-                            # Delay after each like
                             print(f"Success! Waiting for human jitter...")
-                            # Baseline 5s + 2-5s jitter as per AGENTS.md
                             await asyncio.sleep(DELAY_BETWEEN_LIKES)
                             await Confuser.random_delay(2000, 5000)
                         else:

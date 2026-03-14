@@ -9,6 +9,7 @@ import typing
 # --- CONFIGURATION (All times in JST) ---
 LIKER_TIMES = ["12:00", "14:00", "16:00", "18:00", "20:00", "22:00"]
 MARKETING_TIME = ["13:00", "15:00", "17:00", "19:00", "21:00", "23:00"]
+MESSENGER_TIME = ["11:00"]
 POSTER_TIME = ["05:00"]  # 10:00 AM HST is 05:00 AM JST: paused for now
 JITTER_MIN_MINUTES = 2
 JITTER_MAX_MINUTES = 8
@@ -19,6 +20,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 LIKER_SCRIPT = os.path.join(BASE_DIR, "fb_liker.py")
 MARKETING_SCRIPT = os.path.join(BASE_DIR, "fb_marketing_agent.py")
 POSTER_SCRIPT = os.path.join(BASE_DIR, "fb_poster.py")
+MESSENGER_SCRIPT = os.path.join(BASE_DIR, "fb_messenger.py")
 
 
 def log(message):
@@ -64,6 +66,9 @@ def main():
     for t in MARKETING_TIME:
         if now_startup >= get_target_time(t, current_date_startup):
             completed_runs.add(f"{current_date_startup}_marketing_{t}")
+    for t in MESSENGER_TIME:
+        if now_startup >= get_target_time(t, current_date_startup):
+            completed_runs.add(f"{current_date_startup}_messenger_{t}")
     # for t in POSTER_TIME:
     #     if now_startup >= get_target_time(t, current_date_startup):
     #         completed_runs.add(f"{current_date_startup}_poster_{t}")
@@ -104,7 +109,7 @@ def main():
                         success = run_script(["uv", "run", "python", MARKETING_SCRIPT])
                         completed_runs.add(run_id)
 
-        # 3. Check Poster Schedule
+        # 3. Check Poster Schedule (Paused for now)
         # for t in POSTER_TIME:
         #     run_id = f"{current_date}_poster_{t}"
         #     if run_id not in completed_runs:
@@ -115,6 +120,18 @@ def main():
         #                 log(f"Due for Poster run (scheduled for {t}, with {delay}m jitter).")
         #                 success = run_script(["uv", "run", "python", POSTER_SCRIPT])
         #                 completed_runs.add(run_id)
+
+        # 4. Check Messenger Schedule
+        for t in MESSENGER_TIME:
+            run_id = f"{current_date}_messenger_{t}"
+            if run_id not in completed_runs:
+                target_dt = get_target_time(t, current_date)
+                if now >= target_dt:
+                    delay = random.randint(JITTER_MIN_MINUTES, JITTER_MAX_MINUTES)
+                    if now >= target_dt + timedelta(minutes=delay):
+                        log(f"Due for Messenger run (scheduled for {t}, with {delay}m jitter).")
+                        success = run_script(["uv", "run", "python", MESSENGER_SCRIPT])
+                        completed_runs.add(run_id)
 
         # Cleanup old runs from set periodically (e.g., at midnight)
         if current_hm == "00:00":

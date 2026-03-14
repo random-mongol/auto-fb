@@ -74,6 +74,7 @@ The project uses PostgreSQL with SQLAlchemy.
 | **Start Orchestrator** | `uv run python fb_orchestrator.py` |
 | Test Marketing Agent | `uv run python fb_marketing_agent.py` |
 | Test Liker (Once) | `uv run python fb_liker.py --once` |
+| **Test Messenger** | `uv run python fb_messenger.py` |
 | **Run Migrations** | `uv run alembic upgrade head` |
 | **Import Groups** | `uv run python import_groups.py` |
 | **Test Poster** | `uv run python fb_poster.py` |
@@ -85,6 +86,14 @@ Facebook detects automation patterns aggressively. If you are modifying the inte
 
 ## Guides
 When you change something, please update or append your changes to the AGENTS.md at the end of your operation.
+
+### Update 2026-03-14 (v2): Messenger Automation for New Friends
+- **`fb_messenger.py` Added**:
+    - Automates sending greetings to 5 new friends from `https://www.facebook.com/friends/list`.
+    - Implements a "New Conversation" check: Only sends a message if no prior history exists (checked by empty chat log or "You're friends on Facebook" indicator).
+    - Uses the shared `common_fb_profile` for session consistency.
+    - Includes human-mimicking jitter and randomized message templates.
+    - Automatically closes chat windows after processing each friend.
 
 ### Update 2026-03-11: Improved Wait & Retry Logic
 - **`fb_liker.py` Improvements**:
@@ -132,7 +141,19 @@ When you change something, please update or append your changes to the AGENTS.md
     - Updated 'Post' button selectors to include `div[aria-label="Post"]` and lowercase "post" text as suggested by user logs.
     - Simplified 'Next' button selector for better reliability during Page posting.
 
-### Update 2026-03-13: Paused Automated Posting
+### Update 2026-03-14: Reduced Unnecessary Clicks & Improved Reliability
+- **Selector Scoping**: 
+    - `fb_liker.py`: Updated 'Like' button selector to specifically target elements within `div[role="article"]`. This prevents the script from accidentally clicking the "Like" buttons in sidebars, suggested groups, or header elements.
+    - `fb_poster.py`: Updated engagement 'Like' selector to target the first post in the main feed, avoiding the Page-like button on the profile header.
+    - `fb_poster.py`: Re-ordered 'Post' button selectors to prioritize dialog-bound elements.
+- **`human_click` Enhancements**:
+    - Unified `human_click` across all scripts to include mandatory `scroll_into_view_if_needed()`.
+    - Added a small random jitter (0.5s - 1.5s) after scrolling and before clicking to allow the UI to settle and mimic human pause.
+    - This reduces "random" clicks caused by elements moving during ghost-cursor transit.
+
+### Update 2026-03-14 (v3): Messenger Integration in Orchestrator
 - **`fb_orchestrator.py` Updated**:
-    - Commented out the `POSTER_TIME` execution block in the main loop to temporarily stop automated article posting.
-    - Updated `POSTER_TIME` configuration line with a "paused for now" note.
+    - Integrated `fb_messenger.py` into the daily schedule.
+    - Set Messenger script to run daily at 11:00 JST.
+    - Added Messenger task to the startup completion check and main scheduling loop.
+    - Fixed potentially orphaned code in the Poster section of the orchestrator to ensure clean execution.

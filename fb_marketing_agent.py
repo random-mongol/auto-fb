@@ -105,6 +105,9 @@ async def run_fb_automation():
             
             if element:
                 try:
+                    # Ensure element is in view and settled
+                    await element.scroll_into_view_if_needed()
+                    await asyncio.sleep(random.uniform(0.5, 1.5))
                     # Use ghost-cursor's click which handles movement and clicking
                     await cursor.click(element)
                     return True

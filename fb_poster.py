@@ -87,7 +87,8 @@ async def human_click(page, cursor, selector, timeout=15000):
         if element:
             # Scroll into view if needed
             await element.scroll_into_view_if_needed()
-            await asyncio.sleep(1)
+            # Add a small human-like jitter before clicking
+            await asyncio.sleep(random.uniform(0.5, 1.5))
             await cursor.click(element)
             return True
     except Exception as e:
@@ -244,15 +245,14 @@ async def post_to_facebook():
 
             # Step 3: Click on Post button
             print("Clicking 'Post'...")
-            # User suggested: <div aria-label="Post"> text: post
+            # Prioritize selectors inside the dialog to avoid clicking background elements
             post_selectors = [
-                'div[aria-label="Post"]', 
                 'div[role="dialog"] div[aria-label="Post"]',
-                'div[role="button"] span:text-is("Post")',
-                'div[role="button"] span:has-text("Post")',
-                'div[aria-label="Post"] span:has-text("Post")', # Literal lowercase check from user tip
-                'span:text-is("Post")',
-                'span:has-text("Post")'
+                'div[role="dialog"] div[role="button"] span:text-is("Post")',
+                'div[role="dialog"] div[role="button"] span:has-text("Post")',
+                'div[role="dialog"] span:text-is("Post")',
+                'div[aria-label="Post"]', 
+                'span:text-is("Post")'
             ]
             
             post_clicked = False
@@ -302,12 +302,17 @@ async def post_to_facebook():
                     await Confuser.random_delay()
 
                     # 3. Like the first post
-                    print("Attempting to Like the first post...")
-                    like_selector = 'div[aria-label="Like"]'
+                    print("Attempting to Like the FIRST POST (within feed)...")
+                    # Target the first Like button inside an article in the main feed
+                    like_selector = 'div[role="main"] div[role="article"] div[aria-label="Like"]'
                     if await human_click(page, cursor, like_selector):
                         print("Liked successfully.")
                     else:
-                        print("Failed to find Like button.")
+                        print("Failed to find Like button in a post. Checking generic Like button as fallback...")
+                        if await human_click(page, cursor, 'div[aria-label="Like"]', timeout=5000):
+                            print("Liked generic element.")
+                        else:
+                            print("Failed to find any Like button.")
 
                     await asyncio.sleep(3)
 
