@@ -16,11 +16,15 @@ dotenv.load_dotenv()
 # --- CONFIGURATION ---
 PROFILE_DIR = os.getenv("FB_PROFILE_PATH", os.path.join(os.getcwd(), "fb_profile"))
 FRIENDS_LIST_URL = "https://www.facebook.com/friends/list"
-TARGET_MESSAGES_PER_RUN = 5
+TARGET_MESSAGES_PER_RUN = 3
 BASE_DELAY = 5  # seconds
 
 # Mongolian Cyrillic message as requested
-MONGOLIAN_MESSAGE = "Сайн байна уу! Найз болсонд баярлалаа. Та https://huuli.tech -ийг туршиж үзсэн үү? Таны хууль зүйн судалгаанд зарцуулах цагийг хэмнэх хиймэл оюун байгаа юм."
+MESSAGES = [
+    "Сайн байна уу! Найз болсонд баярлалаа. Та https://huuli.tech -ийг туршиж үзсэн үү? Таны хууль зүйн судалгаанд зарцуулах цагийг хэмнэх хиймэл оюун байгаа юм.",
+    "Мэнд хүргэе! Найз болсон танд талархлаа. Хэрэв та хууль зүйн судалгаа хийдэг бол https://huuli.tech -ийг ашиглаад цагаа хэмнээрэй. Манай хиймэл оюун танд туслах болно.",
+    "Сайн байна уу? Найзаар нэмсэнд баярлалаа. Бид хуульчдад зориулсан https://huuli.tech гэх хиймэл оюунт туслах хөгжүүлсэн юм. Та заавал нэг сонирхоод үзээрэй, цаг их хэмнэнэ шүү."
+]
 
 # Isolate Playwright browsers within the project folder
 os.environ["PLAYWRIGHT_BROWSERS_PATH"] = os.path.join(os.getcwd(), ".playwright-browsers")
@@ -134,8 +138,9 @@ async def send_messages(page, cursor):
             # Then Click on div with aria-placeholder="Aa" inside <div> with aria-label="Thread composer"
             composer_selector = 'div[aria-label="Thread composer"] div[aria-placeholder="Aa"]'
             if await human_click(page, cursor, composer_selector, timeout=10000):
-                print(f"Typing message to {friend.name}...")
-                await page.keyboard.type(MONGOLIAN_MESSAGE, delay=random.randint(50, 150))
+                message = random.choice(MESSAGES)
+                print(f"Typing message to {friend.name}: {message[:50]}...")
+                await page.keyboard.type(message, delay=random.randint(50, 150))
                 await asyncio.sleep(1)
                 
                 # Type message then send div with aria-label="Press enter to send"

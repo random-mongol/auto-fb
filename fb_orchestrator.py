@@ -9,8 +9,9 @@ import typing
 # --- CONFIGURATION (All times in JST) ---
 LIKER_TIMES = ["12:00", "14:00", "16:00", "18:00", "20:00", "22:00"]
 MARKETING_TIME = ["13:00", "15:00", "17:00", "19:00", "21:00", "23:00"]
-MESSENGER_TIME = ["11:00"]
+MESSENGER_TIME = ["11:00", "19:30"]
 POSTER_TIME = ["05:00"]  # 10:00 AM HST is 05:00 AM JST: paused for now
+KHANBANK_TIME = [] # ["09:00", "15:00", "21:00"]
 JITTER_MIN_MINUTES = 2
 JITTER_MAX_MINUTES = 8
 CHECK_INTERVAL_SECONDS = 60  # Check every minute
@@ -21,6 +22,7 @@ LIKER_SCRIPT = os.path.join(BASE_DIR, "fb_liker.py")
 MARKETING_SCRIPT = os.path.join(BASE_DIR, "fb_marketing_agent.py")
 POSTER_SCRIPT = os.path.join(BASE_DIR, "fb_poster.py")
 MESSENGER_SCRIPT = os.path.join(BASE_DIR, "fb_messenger.py")
+KHANBANK_SCRIPT = os.path.join(BASE_DIR, "khanbank_login.py")
 
 
 def log(message):
@@ -72,6 +74,9 @@ def main():
     # for t in POSTER_TIME:
     #     if now_startup >= get_target_time(t, current_date_startup):
     #         completed_runs.add(f"{current_date_startup}_poster_{t}")
+    for t in KHANBANK_TIME:
+        if now_startup >= get_target_time(t, current_date_startup):
+            completed_runs.add(f"{current_date_startup}_khanbank_{t}")
     
     if completed_runs:
         log(f"Skipping {len(completed_runs)} already-passed tasks for today.")
@@ -131,6 +136,18 @@ def main():
                     if now >= target_dt + timedelta(minutes=delay):
                         log(f"Due for Messenger run (scheduled for {t}, with {delay}m jitter).")
                         success = run_script(["uv", "run", "python", MESSENGER_SCRIPT])
+                        completed_runs.add(run_id)
+
+        # 5. Check Khan Bank Schedule
+        for t in KHANBANK_TIME:
+            run_id = f"{current_date}_khanbank_{t}"
+            if run_id not in completed_runs:
+                target_dt = get_target_time(t, current_date)
+                if now >= target_dt:
+                    delay = random.randint(JITTER_MIN_MINUTES, JITTER_MAX_MINUTES)
+                    if now >= target_dt + timedelta(minutes=delay):
+                        log(f"Due for Khan Bank run (scheduled for {t}, with {delay}m jitter).")
+                        success = run_script(["uv", "run", "python", KHANBANK_SCRIPT])
                         completed_runs.add(run_id)
 
         # Cleanup old runs from set periodically (e.g., at midnight)

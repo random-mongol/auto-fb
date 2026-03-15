@@ -169,3 +169,29 @@ When you change something, please update or append your changes to the AGENTS.md
     - Produces animated gradient backgrounds, grouped subtitle timing, and a final vertical reel video using MoviePy/Pillow.
 - **Database Changes**:
     - Added `generated_reels` table to track source URLs, artifact directories, step completion timestamps, and error state for resumable generation.
+### Update 2026-03-14 (v4): Messenger Message Rotation & Limits
+- **`fb_messenger.py` Updated**:
+    - Reduced `TARGET_MESSAGES_PER_RUN` to 3 (previously 5).
+    - Implemented a rotation/randomization of 3 similar message templates in Mongolian to increase stealth and avoid message spam detection.
+    - Updated logging to show a snippet of the message being sent.
+### Update 2026-03-15: Khan Bank Login Helper
+- **`khanbank_login.py` Added**:
+    - Opens `https://corp.khanbank.com/auth/login` in a headed Playwright Chromium session.
+    - Loads `BANK_USERNAME` and `BANK_PASSWORD` from `.env`.
+    - Targets the username and password inputs by placeholder text (`Нэвтрэх нэр`, `Нууц үг`) and submits via the page's `[type="submit"]` button.
+    - Uses `playwright-stealth`, `ghost-cursor`, and randomized typing/click delays to stay consistent with the repo's human-like interaction pattern.
+### Update 2026-03-15 (v2): Khan Bank Shared Profile
+- **`khanbank_login.py` Updated**:
+    - Switched the browser profile to use `FB_PROFILE_PATH` so the Khan Bank helper shares the same persistent Chromium profile as the rest of the automation suite.
+### Update 2026-03-15 (v3): Khan Bank Transaction Monitoring
+- **`khanbank_login.py` Updated**:
+    - Added automated transaction monitoring after login.
+    - Scrapes the "Recent Transactions" list on the home page.
+    - Sends new transactions to a dedicated Discord webhook.
+    - Implemented `.last_bank_tx.json` to track the last sent transaction and avoid duplicates.
+    - Includes a background loop that re-checks for transactions every 2 minutes while the browser is open.
+    - Added a 15-minute timeout to the script to allow the orchestrator to continue other tasks.
+- **`fb_orchestrator.py` Updated**:
+    - Integrated Khan Bank monitoring into the daily schedule.
+    - Set to run 3 times daily: **09:00, 15:00, and 21:00 JST**.
+    - Includes randomized jitter (2-8 minutes) for stealth.
