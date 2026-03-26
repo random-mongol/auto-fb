@@ -1,0 +1,18 @@
+[
+  {
+    "id": "account1",
+    "email": "user1@example.com",
+    "password": "password1",
+    "profile_path": "./profiles/account1",
+    "fb_profile_url": "https://www.facebook.com/profile.php?id=YOUR_PAGE_ID_1",
+    "personal_profile_name": "Your Personal Name 1"
+  },
+  {
+    "id": "account2",
+    "email": "user2@example.com",
+    "password": "password2",
+    "profile_path": "./profiles/account2",
+    "fb_profile_url": "https://www.facebook.com/profile.php?id=YOUR_PAGE_ID_2",
+    "personal_profile_name": "Your Personal Name 2"
+  }
+]

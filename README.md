@@ -3,7 +3,7 @@ Automatic
 [x] Facebook group content liker
 [x] Facebook poster from web content, and share 
 [x] Reel generator pipeline
-[ ] Friend Request Follow-Up Messenger
+[x] Friend Request Follow-Up Messenger
    [ ] Reply follow up message
 [ ] Post to other groups
 [ ] Post to other groups

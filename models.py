@@ -1,5 +1,6 @@
-from sqlalchemy import Column, Integer, String, DateTime, func
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, UniqueConstraint, func
 from database import Base
+
 
 class FBGroup(Base):
     __tablename__ = "fbgroups"
@@ -15,27 +16,57 @@ class FBGroup(Base):
     def __repr__(self):
         return f"<FBGroup(name='{self.name}', facebook='{self.facebook}')>"
 
+
+class FBGroupActivity(Base):
+    """Per-account activity tracking for groups (likes and marketing)."""
+    __tablename__ = "fb_group_activity"
+
+    id = Column(Integer, primary_key=True, index=True)
+    account_id = Column(String, nullable=False, index=True)
+    group_id = Column(Integer, ForeignKey("fbgroups.id"), nullable=False, index=True)
+    last_liked_date = Column(DateTime, nullable=True)
+    last_marketed_date = Column(DateTime, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("account_id", "group_id", name="uq_fb_group_activity_account_group"),
+    )
+
+    def __repr__(self):
+        return f"<FBGroupActivity(account='{self.account_id}', group_id={self.group_id})>"
+
+
 class PostedArticle(Base):
     __tablename__ = "posted_articles"
 
     id = Column(Integer, primary_key=True, index=True)
-    url = Column(String, unique=True, index=True, nullable=False)
+    account_id = Column(String, nullable=True, index=True)
+    url = Column(String, nullable=False)
     posted_at = Column(DateTime, server_default=func.now())
 
+    __table_args__ = (
+        UniqueConstraint("account_id", "url", name="uq_posted_articles_account_url"),
+    )
+
     def __repr__(self):
-        return f"<PostedArticle(url='{self.url}')>"
+        return f"<PostedArticle(account='{self.account_id}', url='{self.url}')>"
+
 
 class FBFriend(Base):
     __tablename__ = "fb_friends"
 
     id = Column(Integer, primary_key=True, index=True)
+    account_id = Column(String, nullable=True, index=True)
     name = Column(String, nullable=True)
-    profile_url = Column(String, unique=True, index=True, nullable=False)
+    profile_url = Column(String, nullable=False)
     last_messaged_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
 
+    __table_args__ = (
+        UniqueConstraint("account_id", "profile_url", name="uq_fb_friends_account_profile"),
+    )
+
     def __repr__(self):
-        return f"<FBFriend(name='{self.name}', profile_url='{self.profile_url}')>"
+        return f"<FBFriend(account='{self.account_id}', name='{self.name}', profile_url='{self.profile_url}')>"
 
 
 class GeneratedReel(Base):
