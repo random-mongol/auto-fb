@@ -195,3 +195,11 @@ When you change something, please update or append your changes to the AGENTS.md
     - Integrated Khan Bank monitoring into the daily schedule.
     - Set to run 3 times daily: **09:00, 15:00, and 21:00 JST**.
     - Includes randomized jitter (2-8 minutes) for stealth.
+
+### Update 2026-04-16: Orchestrator Startup Bootstrap & Persistent Schedule State
+- **`fb_orchestrator.py` Updated**:
+    - Added a startup bootstrap pass for the active Facebook automations (`fb_liker.py`, `fb_marketing_agent.py`, and `fb_messenger.py`) so the orchestrator does useful work immediately after launch instead of appearing idle.
+    - Replaced per-loop random jitter generation with a persisted per-slot jitter map stored in `.orchestrator_state.json`, keeping each scheduled run stable across checks and restarts.
+    - Changed startup skip logic to only skip slots whose full due window (scheduled time + assigned jitter) has already passed, preventing false skips.
+    - Added persistent tracking for completed schedule slots and same-day startup runs so restarts do not repeatedly trigger extra bootstrap passes, and only records a bootstrap/scheduled slot as completed when the underlying task succeeds.
+    - Added clearer logging for per-account execution and the next upcoming scheduled run to make waiting behavior visible.

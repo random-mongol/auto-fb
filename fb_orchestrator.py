@@ -1,10 +1,12 @@
-import subprocess
-import time
+import json
 import os
-import sys
 import random
-from datetime import datetime, timedelta
+import subprocess
+import sys
+import time
 import typing
+from datetime import datetime, timedelta
+
 from accounts import load_accounts
 
 # --- CONFIGURATION (All times in JST) ---
@@ -24,12 +26,105 @@ MARKETING_SCRIPT = os.path.join(BASE_DIR, "fb_marketing_agent.py")
 POSTER_SCRIPT = os.path.join(BASE_DIR, "fb_poster.py")
 MESSENGER_SCRIPT = os.path.join(BASE_DIR, "fb_messenger.py")
 KHANBANK_SCRIPT = os.path.join(BASE_DIR, "khanbank_login.py")
+STATE_FILE = os.path.join(BASE_DIR, ".orchestrator_state.json")
+
+
+TaskConfig = typing.Dict[str, typing.Any]
 
 
 def log(message):
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     print(f"[{timestamp}] [Orchestrator] {message}")
     sys.stdout.flush()
+
+
+def build_tasks() -> typing.List[TaskConfig]:
+    return [
+        {
+            "name": "liker",
+            "label": "Liker",
+            "enabled": True,
+            "times": LIKER_TIMES,
+            "startup": True,
+            "runner": lambda: run_for_all_accounts(LIKER_SCRIPT, extra_args=["--once"]),
+        },
+        {
+            "name": "marketing",
+            "label": "Marketing",
+            "enabled": True,
+            "times": MARKETING_TIME,
+            "startup": True,
+            "runner": lambda: run_for_all_accounts(MARKETING_SCRIPT),
+        },
+        {
+            "name": "poster",
+            "label": "Poster",
+            "enabled": False,
+            "times": POSTER_TIME,
+            "startup": False,
+            "runner": lambda: run_for_all_accounts(POSTER_SCRIPT),
+        },
+        {
+            "name": "messenger",
+            "label": "Messenger",
+            "enabled": True,
+            "times": MESSENGER_TIME,
+            "startup": True,
+            "runner": lambda: run_for_all_accounts(MESSENGER_SCRIPT),
+        },
+        {
+            "name": "khanbank",
+            "label": "Khan Bank",
+            "enabled": bool(KHANBANK_TIME),
+            "times": KHANBANK_TIME,
+            "startup": False,
+            "runner": lambda: run_script(["uv", "run", "python", KHANBANK_SCRIPT]),
+        },
+    ]
+
+
+def default_state() -> typing.Dict[str, typing.Any]:
+    return {
+        "completed_runs": [],
+        "slot_jitter_minutes": {},
+        "startup_runs": {},
+    }
+
+
+def load_state() -> typing.Dict[str, typing.Any]:
+    if not os.path.exists(STATE_FILE):
+        return default_state()
+
+    try:
+        with open(STATE_FILE, "r", encoding="utf-8") as f:
+            state = json.load(f)
+    except Exception as e:
+        log(f"Could not read orchestrator state file, starting fresh: {e}")
+        return default_state()
+
+    return {
+        "completed_runs": state.get("completed_runs", []),
+        "slot_jitter_minutes": state.get("slot_jitter_minutes", {}),
+        "startup_runs": state.get("startup_runs", {}),
+    }
+
+
+def save_state(state: typing.Dict[str, typing.Any]) -> None:
+    with open(STATE_FILE, "w", encoding="utf-8") as f:
+        json.dump(state, f, indent=2, sort_keys=True)
+
+
+def prune_state(state: typing.Dict[str, typing.Any], current_date: str) -> typing.Dict[str, typing.Any]:
+    state["completed_runs"] = [run_id for run_id in state["completed_runs"] if run_id.startswith(current_date)]
+    state["slot_jitter_minutes"] = {
+        run_id: minutes
+        for run_id, minutes in state["slot_jitter_minutes"].items()
+        if run_id.startswith(current_date)
+    }
+    state["startup_runs"] = {
+        date_key: runs for date_key, runs in state["startup_runs"].items() if date_key == current_date
+    }
+    return state
 
 
 def run_script(cmd):
@@ -39,9 +134,9 @@ def run_script(cmd):
         if result.returncode == 0:
             log(f"Successfully finished: {' '.join(cmd[-3:])}")
             return True
-        else:
-            log(f"Script failed with return code {result.returncode}: {' '.join(cmd[-3:])}")
-            return False
+
+        log(f"Script failed with return code {result.returncode}: {' '.join(cmd[-3:])}")
+        return False
     except Exception as e:
         log(f"Error running script: {e}")
         return False
@@ -50,16 +145,140 @@ def run_script(cmd):
 def run_for_all_accounts(script_path, extra_args=None):
     """Run a script sequentially for every configured account."""
     accounts = load_accounts()
+    if not accounts:
+        log(f"No accounts configured for {os.path.basename(script_path)}.")
+        return False
+
+    all_succeeded = True
     for account in accounts:
+        log(f"Running {os.path.basename(script_path)} for account '{account.id}'.")
         cmd = ["uv", "run", "python", script_path, "--account", account.id]
         if extra_args:
             cmd.extend(extra_args)
-        run_script(cmd)
+        if not run_script(cmd):
+            all_succeeded = False
+
+    return all_succeeded
 
 
 def get_target_time(time_str, date_str):
     """Returns a datetime object for the given HH:MM and YYYY-MM-DD."""
     return datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M")
+
+
+def make_run_id(date_str: str, task_name: str, time_str: str) -> str:
+    return f"{date_str}_{task_name}_{time_str}"
+
+
+def get_slot_jitter_minutes(state: typing.Dict[str, typing.Any], run_id: str) -> int:
+    jitter = state["slot_jitter_minutes"].get(run_id)
+    if jitter is None:
+        jitter = random.randint(JITTER_MIN_MINUTES, JITTER_MAX_MINUTES)
+        state["slot_jitter_minutes"][run_id] = jitter
+        save_state(state)
+    return jitter
+
+
+def get_due_time(state: typing.Dict[str, typing.Any], date_str: str, task_name: str, time_str: str) -> datetime:
+    run_id = make_run_id(date_str, task_name, time_str)
+    jitter = get_slot_jitter_minutes(state, run_id)
+    return get_target_time(time_str, date_str) + timedelta(minutes=jitter)
+
+
+def mark_completed(
+    completed_runs: typing.Set[str],
+    state: typing.Dict[str, typing.Any],
+    run_id: str,
+) -> None:
+    if run_id not in completed_runs:
+        completed_runs.add(run_id)
+        state["completed_runs"] = sorted(completed_runs)
+        save_state(state)
+
+
+def prepopulate_passed_slots(
+    now: datetime,
+    tasks: typing.List[TaskConfig],
+    completed_runs: typing.Set[str],
+    state: typing.Dict[str, typing.Any],
+) -> int:
+    current_date = now.strftime("%Y-%m-%d")
+    skipped = 0
+
+    for task in tasks:
+        if not task["enabled"]:
+            continue
+        for time_str in task["times"]:
+            run_id = make_run_id(current_date, task["name"], time_str)
+            if run_id in completed_runs:
+                continue
+
+            due_time = get_due_time(state, current_date, task["name"], time_str)
+            if now >= due_time:
+                completed_runs.add(run_id)
+                skipped += 1
+
+    state["completed_runs"] = sorted(completed_runs)
+    save_state(state)
+    return skipped
+
+
+def run_startup_bootstrap(
+    current_date: str,
+    tasks: typing.List[TaskConfig],
+    state: typing.Dict[str, typing.Any],
+) -> None:
+    already_bootstrapped = set(state["startup_runs"].get(current_date, []))
+    startup_tasks = [
+        task
+        for task in tasks
+        if task["enabled"] and task["startup"] and task["times"] and task["name"] not in already_bootstrapped
+    ]
+
+    if not startup_tasks:
+        log("Startup bootstrap already completed for today.")
+        return
+
+    log(
+        "Running startup bootstrap so the active Facebook automations do at least one pass "
+        f"before waiting for the next schedule: {[task['name'] for task in startup_tasks]}"
+    )
+
+    for task in startup_tasks:
+        log(f"Startup run: {task['label']}.")
+        if task["runner"]():
+            already_bootstrapped.add(task["name"])
+            state["startup_runs"][current_date] = sorted(already_bootstrapped)
+            save_state(state)
+        else:
+            log(f"Startup run failed for {task['label']}; leaving it eligible for a retry on restart.")
+
+
+def get_next_due_run(
+    now: datetime,
+    current_date: str,
+    tasks: typing.List[TaskConfig],
+    completed_runs: typing.Set[str],
+    state: typing.Dict[str, typing.Any],
+) -> typing.Optional[typing.Tuple[datetime, TaskConfig, str, int]]:
+    next_item = None
+
+    for task in tasks:
+        if not task["enabled"]:
+            continue
+        for time_str in task["times"]:
+            run_id = make_run_id(current_date, task["name"], time_str)
+            if run_id in completed_runs:
+                continue
+
+            jitter = get_slot_jitter_minutes(state, run_id)
+            due_time = get_target_time(time_str, current_date) + timedelta(minutes=jitter)
+            candidate = (due_time, task, time_str, jitter)
+
+            if next_item is None or candidate[0] < next_item[0]:
+                next_item = candidate
+
+    return next_item
 
 
 def main():
@@ -68,102 +287,67 @@ def main():
     accounts = load_accounts()
     log(f"Loaded {len(accounts)} account(s): {[a.id for a in accounts]}")
 
-    # Track which specific slots have been run today to avoid double-runs
-    # Format: "YYYY-MM-DD_Script_Time"
-    completed_runs: typing.Set[str] = set()
+    tasks = build_tasks()
+    state = prune_state(load_state(), datetime.now().strftime("%Y-%m-%d"))
+    save_state(state)
 
-    # Pre-populate with anything that passed today already
+    completed_runs: typing.Set[str] = set(state["completed_runs"])
+
     now_startup = datetime.now()
     current_date_startup = now_startup.strftime("%Y-%m-%d")
+    skipped = prepopulate_passed_slots(now_startup, tasks, completed_runs, state)
+    if skipped:
+        log(f"Skipping {skipped} scheduled slot(s) whose due window already passed today.")
 
-    for t in LIKER_TIMES:
-        if now_startup >= get_target_time(t, current_date_startup):
-            completed_runs.add(f"{current_date_startup}_liker_{t}")
-    for t in MARKETING_TIME:
-        if now_startup >= get_target_time(t, current_date_startup):
-            completed_runs.add(f"{current_date_startup}_marketing_{t}")
-    for t in MESSENGER_TIME:
-        if now_startup >= get_target_time(t, current_date_startup):
-            completed_runs.add(f"{current_date_startup}_messenger_{t}")
-    # for t in POSTER_TIME:
-    #     if now_startup >= get_target_time(t, current_date_startup):
-    #         completed_runs.add(f"{current_date_startup}_poster_{t}")
-    for t in KHANBANK_TIME:
-        if now_startup >= get_target_time(t, current_date_startup):
-            completed_runs.add(f"{current_date_startup}_khanbank_{t}")
+    run_startup_bootstrap(current_date_startup, tasks, state)
 
-    if completed_runs:
-        log(f"Skipping {len(completed_runs)} already-passed tasks for today.")
+    state = prune_state(load_state(), current_date_startup)
+    completed_runs = set(state["completed_runs"])
+
+    announced_next_run_id = None
 
     while True:
         now = datetime.now()
         current_date = now.strftime("%Y-%m-%d")
-        current_hm = now.strftime("%H:%M")
 
-        # 1. Check Liker Schedule
-        for t in LIKER_TIMES:
-            run_id = f"{current_date}_liker_{t}"
-            if run_id not in completed_runs:
-                target_dt = get_target_time(t, current_date)
-                if now >= target_dt:
-                    delay = random.randint(JITTER_MIN_MINUTES, JITTER_MAX_MINUTES)
-                    if now >= target_dt + timedelta(minutes=delay):
-                        log(f"Due for Liker run (scheduled {t}, {delay}m jitter) — running for all accounts.")
-                        run_for_all_accounts(LIKER_SCRIPT, extra_args=["--once"])
-                        completed_runs.add(run_id)
+        state = prune_state(load_state(), current_date)
+        completed_runs = set(state["completed_runs"])
 
-        # 2. Check Marketing Schedule
-        for t in MARKETING_TIME:
-            run_id = f"{current_date}_marketing_{t}"
-            if run_id not in completed_runs:
-                target_dt = get_target_time(t, current_date)
-                if now >= target_dt:
-                    delay = random.randint(JITTER_MIN_MINUTES, JITTER_MAX_MINUTES)
-                    if now >= target_dt + timedelta(minutes=delay):
-                        log(f"Due for Marketing run (scheduled {t}, {delay}m jitter) — running for all accounts.")
-                        run_for_all_accounts(MARKETING_SCRIPT)
-                        completed_runs.add(run_id)
+        for task in tasks:
+            if not task["enabled"]:
+                continue
+            for time_str in task["times"]:
+                run_id = make_run_id(current_date, task["name"], time_str)
+                if run_id in completed_runs:
+                    continue
 
-        # 3. Check Poster Schedule (Paused for now)
-        # for t in POSTER_TIME:
-        #     run_id = f"{current_date}_poster_{t}"
-        #     if run_id not in completed_runs:
-        #         target_dt = get_target_time(t, current_date)
-        #         if now >= target_dt:
-        #             delay = random.randint(JITTER_MIN_MINUTES, JITTER_MAX_MINUTES)
-        #             if now >= target_dt + timedelta(minutes=delay):
-        #                 log(f"Due for Poster run (scheduled {t}, {delay}m jitter) — running for all accounts.")
-        #                 run_for_all_accounts(POSTER_SCRIPT)
-        #                 completed_runs.add(run_id)
+                jitter = get_slot_jitter_minutes(state, run_id)
+                due_time = get_target_time(time_str, current_date) + timedelta(minutes=jitter)
+                if now >= due_time:
+                    log(
+                        f"Due for {task['label']} run (scheduled {time_str}, {jitter}m jitter, "
+                        f"due {due_time.strftime('%H:%M')})"
+                    )
+                    if task["runner"]():
+                        mark_completed(completed_runs, state, run_id)
+                        announced_next_run_id = None
+                    else:
+                        log(f"{task['label']} run failed; leaving slot pending for retry.")
 
-        # 4. Check Messenger Schedule
-        for t in MESSENGER_TIME:
-            run_id = f"{current_date}_messenger_{t}"
-            if run_id not in completed_runs:
-                target_dt = get_target_time(t, current_date)
-                if now >= target_dt:
-                    delay = random.randint(JITTER_MIN_MINUTES, JITTER_MAX_MINUTES)
-                    if now >= target_dt + timedelta(minutes=delay):
-                        log(f"Due for Messenger run (scheduled {t}, {delay}m jitter) — running for all accounts.")
-                        run_for_all_accounts(MESSENGER_SCRIPT)
-                        completed_runs.add(run_id)
-
-        # 5. Check Khan Bank Schedule
-        for t in KHANBANK_TIME:
-            run_id = f"{current_date}_khanbank_{t}"
-            if run_id not in completed_runs:
-                target_dt = get_target_time(t, current_date)
-                if now >= target_dt:
-                    delay = random.randint(JITTER_MIN_MINUTES, JITTER_MAX_MINUTES)
-                    if now >= target_dt + timedelta(minutes=delay):
-                        log(f"Due for Khan Bank run (scheduled {t}, {delay}m jitter).")
-                        run_script(["uv", "run", "python", KHANBANK_SCRIPT])
-                        completed_runs.add(run_id)
-
-        # Cleanup old runs from set at midnight
-        if current_hm == "00:00":
-            yesterday = (now - timedelta(days=1)).strftime("%Y-%m-%d")
-            completed_runs = {r for r in completed_runs if not r.startswith(yesterday)}
+        next_run = get_next_due_run(now, current_date, tasks, completed_runs, state)
+        if next_run:
+            due_time, task, time_str, jitter = next_run
+            next_run_id = make_run_id(current_date, task["name"], time_str)
+            if next_run_id != announced_next_run_id:
+                log(
+                    f"Next scheduled run: {task['label']} at {due_time.strftime('%Y-%m-%d %H:%M:%S')} "
+                    f"JST (slot {time_str}, {jitter}m jitter)."
+                )
+                announced_next_run_id = next_run_id
+        else:
+            if announced_next_run_id != "__done__":
+                log("No scheduled runs remain for today. Waiting for tomorrow's schedule.")
+                announced_next_run_id = "__done__"
 
         time.sleep(CHECK_INTERVAL_SECONDS)
 

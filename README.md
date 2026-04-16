@@ -5,7 +5,9 @@ Automatic
 [x] Reel generator pipeline
 [x] Friend Request Follow-Up Messenger
    [ ] Reply follow up message
-[ ] Post to other groups
+[ ] Find and discover new facebook groups
+- Store in the database 
+- Ask to join and store 
 [ ] Post to other groups
 [ ] Write comments
 
