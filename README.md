@@ -113,3 +113,6 @@ Import Groups from HTML	`uv run python import_groups.py`
 Test Liker (Single Run)	`uv run python fb_liker.py --once`
 Test Marketing Agent	`uv run python fb_marketing_agent.py`
 Generate Reel Pipeline	`uv run python fb_reel_generator.py`
+
+
+git remote set-url origin git@github.com-random-mongol:random-mongol/auto-fb.git

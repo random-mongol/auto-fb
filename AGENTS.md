@@ -203,3 +203,43 @@ When you change something, please update or append your changes to the AGENTS.md
     - Changed startup skip logic to only skip slots whose full due window (scheduled time + assigned jitter) has already passed, preventing false skips.
     - Added persistent tracking for completed schedule slots and same-day startup runs so restarts do not repeatedly trigger extra bootstrap passes, and only records a bootstrap/scheduled slot as completed when the underlying task succeeds.
     - Added clearer logging for per-account execution and the next upcoming scheduled run to make waiting behavior visible.
+
+### Update 2026-04-16 (v2): Messenger Queue Sanitization
+- **`fb_messenger.py` Updated**:
+    - Added canonical Facebook profile URL normalization so messenger only stores direct profile slug URLs (`https://www.facebook.com/user-slug`) from the friends list.
+    - Excluded navigation, notifications, groups, watch, permalink, and other non-profile routes from friend harvesting.
+    - Added a pre-send cleanup pass that removes invalid queued friend rows from `fb_friends` before trying to open chats, preventing the script from getting stuck on `/notifications/` and group URLs.
+    - Normalized queued profile URLs before sending and expanded candidate selection so a few bad rows do not consume the whole per-run send budget.
+
+### Update 2026-04-16 (v3): Messenger Existing-Chat Guard Restored
+- **`fb_messenger.py` Updated**:
+    - Restored the "new conversation only" behavior promised in the repo guide by inspecting the opened chat before typing.
+    - Treats visible prior-message markers and non-system transcript lines as an existing conversation and skips sending in that case.
+    - Marks skipped existing conversations as processed in `fb_friends.last_messaged_at` so the automation does not keep retrying the same already-contacted people.
+    - Skips uncertain chats conservatively instead of sending when the transcript cannot be classified safely.
+    - Closes open chat windows between profiles and ignores empty-chat prompts like `Write to <name>` so stale Messenger UI does not leak into the next friend's classification.
+
+### Update 2026-04-18: Marketing Source Switched to Friends Page
+- **`fb_marketing_agent.py` Updated**:
+    - Replaced the group-contributors navigation flow with a direct visit to `https://www.facebook.com/friends` for friend-request discovery.
+    - Removed the dependency on picking a target group from the database before marketing runs.
+    - Kept the ghost-cursor click path and human jitter, while adding a repeated no-progress guard so the script exits instead of scrolling forever when no more `Add friend` targets are available.
+
+### Update 2026-04-18 (v2): Existing Friends Unfriend Flow
+- **`fb_unfriend.py` Added**:
+    - Added a dedicated headed Playwright flow to unfriend existing friends using the shared persistent profile and ghost-cursor interactions.
+    - Harvests candidate profile URLs from `https://www.facebook.com/friends/list`, then visits each profile and attempts the `Friends -> Unfriend -> Confirm` sequence with jittered pacing.
+    - Supports `--limit` for bounded runs and `--all` to continue through every discovered profile from the current friends list page.
+
+### Update 2026-04-24: Messenger Direct Thread Navigation
+- **`fb_messenger.py` Updated**:
+    - Added a direct Messenger thread URL builder (`https://www.facebook.com/messages/t/<profile-slug>`) so send attempts open chats directly instead of waiting on each profile page's Message button.
+    - Added a visible-element helper for composer detection and broadened composer lookup to tolerate Messenger page variants.
+    - Kept the old profile-page Message-button flow as a fallback when the direct thread route does not expose a composer, preserving compatibility with UI changes.
+    - Changed the per-run loop to keep scanning queued friends until it actually sends up to 3 new messages, instead of stopping after merely inspecting the first 3 candidates.
+
+### Update 2026-04-24 (v2): Messenger Copy Refresh
+- **`fb_messenger.py` Updated**:
+    - Rewrote the Mongolian greeting templates to sound more natural and conversational.
+    - Softened the marketing tone so the messages feel less scripted and more like a genuine introduction.
+    - Kept the three-template rotation while making each variant ask for feedback in a friendlier way.

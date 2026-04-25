@@ -12,7 +12,7 @@ from accounts import load_accounts
 # --- CONFIGURATION (All times in JST) ---
 LIKER_TIMES = ["12:00", "14:00", "16:00", "18:00", "20:00", "22:00"]
 MARKETING_TIME = ["13:00", "15:00", "17:00", "19:00", "21:00", "23:00"]
-MESSENGER_TIME = ["11:00", "19:30"]
+MESSENGER_TIME = ["11:00", "15:30", "19:30"]
 POSTER_TIME = ["05:00"]  # 10:00 AM HST is 05:00 AM JST: paused for now
 KHANBANK_TIME = []  # ["09:00", "15:00", "21:00"]
 JITTER_MIN_MINUTES = 2

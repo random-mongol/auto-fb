@@ -5,11 +5,6 @@ from playwright.async_api import async_playwright
 from playwright_stealth import Stealth
 from python_ghost_cursor.playwright_async import create_cursor
 import dotenv
-from sqlalchemy import func, and_
-from sqlalchemy.orm import aliased
-from database import SessionLocal
-from models import FBGroup, FBGroupActivity
-from datetime import datetime
 from accounts import Account
 
 dotenv.load_dotenv()
@@ -19,6 +14,8 @@ os.environ["PLAYWRIGHT_BROWSERS_PATH"] = os.path.join(os.getcwd(), ".playwright-
 
 FRIEND_LIMIT_DAILY = 5
 BASE_DELAY = 5  # seconds
+FRIENDS_PAGE_URL = "https://www.facebook.com/friends"
+MAX_EMPTY_SCROLLS = 5
 
 
 class Confuser:
@@ -45,38 +42,8 @@ async def run_fb_automation(account: Account):
 
     if not os.path.exists(profile_dir):
         os.makedirs(profile_dir)
-
-    db_session = SessionLocal()
-    target_url = None
-    group_record = None
-
-    try:
-        # Pick least recently marketed group for this account
-        activity = aliased(FBGroupActivity)
-        group_record = (
-            db_session.query(FBGroup)
-            .outerjoin(activity, and_(activity.group_id == FBGroup.id, activity.account_id == account_id))
-            .order_by(activity.last_marketed_date.asc().nullsfirst(), func.random())
-            .first()
-        )
-        if group_record:
-            target_url = group_record.facebook
-    except Exception as e:
-        print(f"[{account_id}] Error fetching from DB: {e}")
-    finally:
-        db_session.close()
-
-    if not target_url:
-        print(f"[{account_id}] No group URLs found in the database. Please import groups first.")
-        return
-
-    if not target_url.endswith('/'):
-        target_url += '/'
-
-    if "members/contributors" not in target_url:
-        target_url += "members/contributors"
-
-    print(f"[{account_id}] Targeting: {target_url}")
+    target_url = FRIENDS_PAGE_URL
+    print(f"[{account_id}] Targeting friend suggestions from: {target_url}")
 
     async with async_playwright() as p:
         print(f"[{account_id}] Launching browser with profile: {profile_dir}")
@@ -126,9 +93,9 @@ async def run_fb_automation(account: Account):
             try:
                 await page.goto(target_url, wait_until="domcontentloaded", timeout=20000)
                 try:
-                    await page.wait_for_selector('text="Group contributors"', timeout=10000)
+                    await page.wait_for_selector('div[role="main"]', timeout=10000)
                 except:
-                    await page.wait_for_selector('div[role="main"]', timeout=5000)
+                    await asyncio.sleep(5)
                 break
             except Exception as e:
                 error_msg = str(e)
@@ -157,12 +124,10 @@ async def run_fb_automation(account: Account):
             print("Detected target page or bypass. Proceeding...")
             if target_url not in page.url:
                 await page.goto(target_url, wait_until="domcontentloaded")
-                try:
-                    await page.wait_for_selector('text="Group contributors"', timeout=10000)
-                except:
-                    pass
+                await page.wait_for_selector('div[role="main"]', timeout=10000)
 
         friends_added_today = 0
+        empty_scrolls = 0
         print(f"[{account_id}] Starting to add friends (Target: {FRIEND_LIMIT_DAILY})")
 
         while friends_added_today < FRIEND_LIMIT_DAILY:
@@ -170,11 +135,16 @@ async def run_fb_automation(account: Account):
                 await page.wait_for_selector('div[role="main"]', timeout=30000)
                 await page.evaluate("window.scrollBy(0, window.innerHeight * 0.5)")
                 await Confuser.random_delay(2000, 4000)
+                sent_request_this_pass = False
 
                 try:
-                    potential_buttons = await page.query_selector_all('span:text-is("Add friend")')
+                    potential_buttons = await page.query_selector_all('div[role="button"] span:text-is("Add friend")')
                     if not potential_buttons:
-                        potential_buttons = await page.query_selector_all('span:text("Add friend")')
+                        potential_buttons = await page.query_selector_all('div[role="button"] span:text("Add friend")')
+                    if not potential_buttons:
+                        potential_buttons = await page.query_selector_all('span:text-is("Add Friend")')
+                    if not potential_buttons:
+                        potential_buttons = await page.query_selector_all('span:text("Add Friend")')
                 except Exception as e:
                     if "context was destroyed" in str(e):
                         print("Execution context destroyed. Retrying in next loop...")
@@ -195,6 +165,8 @@ async def run_fb_automation(account: Account):
                         success = await human_click(btn)
                         if success:
                             friends_added_today += 1
+                            sent_request_this_pass = True
+                            empty_scrolls = 0
                             jittered_delay = BASE_DELAY + random.uniform(-1.5, 3.5)
                             print(f"[{account_id}] [{friends_added_today}/{FRIEND_LIMIT_DAILY}] Friend request sent!")
                             print(f"Cooling down for {jittered_delay:.2f}s...")
@@ -202,7 +174,21 @@ async def run_fb_automation(account: Account):
                     except Exception as e:
                         print(f"Error clicking button: {e}")
 
-                print("Scrolling for more members...")
+                if friends_added_today >= FRIEND_LIMIT_DAILY:
+                    break
+
+                if not potential_buttons:
+                    empty_scrolls += 1
+                    print(f"[{account_id}] No add-friend buttons found on this pass ({empty_scrolls}/{MAX_EMPTY_SCROLLS}).")
+                elif not sent_request_this_pass:
+                    empty_scrolls += 1
+                    print(f"[{account_id}] Add-friend buttons were visible, but no request was sent on this pass ({empty_scrolls}/{MAX_EMPTY_SCROLLS}).")
+
+                if empty_scrolls >= MAX_EMPTY_SCROLLS:
+                    print(f"[{account_id}] No new friend-request targets after repeated scrolling. Stopping safely.")
+                    break
+
+                print("Scrolling for more friend suggestions...")
                 await page.evaluate("window.scrollBy(0, window.innerHeight)")
                 await Confuser.random_delay(3000, 5000)
 
@@ -217,24 +203,6 @@ async def run_fb_automation(account: Account):
         print(f"[{account_id}] Successfully sent {friends_added_today} friend requests.")
         await asyncio.sleep(5)
         await context.close()
-
-        if friends_added_today > 0 and group_record:
-            db_session = SessionLocal()
-            try:
-                activity_record = db_session.query(FBGroupActivity).filter(
-                    FBGroupActivity.account_id == account_id,
-                    FBGroupActivity.group_id == group_record.id
-                ).first()
-                if not activity_record:
-                    activity_record = FBGroupActivity(account_id=account_id, group_id=group_record.id)
-                    db_session.add(activity_record)
-                activity_record.last_marketed_date = datetime.now()
-                db_session.commit()
-                print(f"[{account_id}] Updated last_marketed_date for group {group_record.name}")
-            except Exception as e:
-                print(f"[{account_id}] Error updating DB: {e}")
-            finally:
-                db_session.close()
 
 
 if __name__ == "__main__":
